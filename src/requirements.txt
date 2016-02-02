@@ -1,0 +1,9 @@
+Cython==0.23.4
+enum34==1.1.2
+funcsigs==0.4
+llvmlite==0.8.0
+numba==0.23.0
+numpy==1.10.4
+singledispatch==3.4.0.3
+six==1.10.0
+wheel==0.24.0

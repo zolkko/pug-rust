@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+        <title>Extending Python with Rust</title>
+		<meta name="description" content="A framework for easily creating beautiful presentations using HTML">
+		<meta name="author" content="Hakim El Hattab">
+		<meta name="apple-mobile-web-app-capable" content="yes">
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui">
+		<link rel="stylesheet" href="css/reveal.css">
+		<link rel="stylesheet" href="css/theme/white.css" id="theme">
+		<!-- Code syntax highlighting -->
+		<link rel="stylesheet" href="lib/css/zenburn.css">
+		<!-- Printing and PDF exports -->
+		<script>
+			var link = document.createElement( 'link' );
+			link.rel = 'stylesheet';
+			link.type = 'text/css';
+			link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
+			document.getElementsByTagName( 'head' )[0].appendChild( link );
+		</script>
+		<!--[if lt IE 9]>
+		<script src="lib/js/html5shiv.js"></script>
+		<![endif]-->
+	</head>
+
+	<body>
+
+		<div class="reveal">
+
+			<!-- Any section element inside of this container is displayed as a slide -->
+			<div class="slides">
+				<section>
+                    <h1>Extending Python with Rust</h1>
+				</section>
+
+                <section>
+                    <section>
+                        <h4>Optimization</h4>
+                        <ul>
+                            <li>
+                                Programming productivity
+                                <ul>
+                                    <li>&ldquo;YAGNI&rdquo; &copy; Yehuda Katz, Let's Talk About Rust @ GoGaRuCo 2014</li>
+                                    <li>&ldquo;This stresses power over usability. Right?! You need a PhD here!&rdquo;
+                                        Simon Peyton Jones, Adventure with Types in Haskell, 2014</li>
+                                </ul>
+                            </li>
+                            <li>Higher level optimization have greater impact
+                                <ul>
+                                    <li>Architecture/Design Level</li>
+                                    <li>High-level, Algorithms and data structures</li>
+                                    <li>Low-Level</li>
+                                </ul>
+                            </li>
+                        </ul>
+                    </section>
+                    <section>
+                        <h4>Runtime level optimization</h4>
+                        <img src="pyston-vs-pypy.png" style="height: 9.5em !important;" />
+                        <p>25% better performance than CPython</p>
+                        <p>&quot;maybe like 10% runtime&quot;, hot attr</p>
+                        <p>by Kevin Modzelewski @ pyston talk November 24, 2015</p>
+                    </section>
+                    <section>
+                        <h4>Source code level optimization</h4>
+<pre><code data-trim>LST = list(map(''.join, product('abc', repeat=17))) </code></pre>
+<pre><code data-trim>def foo():
+    return map(str.upper, LST)
+</code></pre>
+
+<pre><code data-trim>def bar():
+    res = []
+    for i in LST:
+        res.append(i.upper())
+    return res
+</code></pre>
+
+<pre><code data-trim>def baz():
+    return [i.upper() for i in LST]
+</code></pre>
+                    </section>
+                </section>
+
+				<!-- Example of nested vertical slides -->
+				<section>
+					<section>
+						<h2>Tools</h2>
+                        <ul>
+                            <li>numba</li>
+                            <li>C extension</li>
+                            <li>cython</li>
+                        </ul>
+					</section>
+				</section>
+
+                <section>
+                    <h4>Numba</h4>
+                    <section>
+<pre><code data-trim>
+@jit(int32(int32, int32), nopython=True, nogil=True)
+def add_two(a, b):
+    acc = 0
+    i = 0
+    while i < 1000:
+        acc += a + b
+        i += 1
+    return acc
+</code></pre>
+                    </section>
+
+                    <section>
+<pre><code data-trim>
+12 SETUP_LOOP              40 (to 55)
+15 LOAD_FAST                3 (i)
+18 LOAD_CONST               2 (1000)
+21 COMPARE_OP               0 (<)
+24 POP_JUMP_IF_FALSE       54
+
+27 LOAD_FAST                2 (acc)
+30 LOAD_FAST                0 (a)
+33 LOAD_FAST                1 (b)
+36 BINARY_ADD
+37 INPLACE_ADD
+38 STORE_FAST               2 (acc)
+
+41 LOAD_FAST                3 (i)
+44 LOAD_CONST               3 (1)
+47 INPLACE_ADD
+48 STORE_FAST               3 (i)
+51 JUMP_ABSOLUTE           15
+54 POP_BLOCK
+</code></pre>
+                    </section>
+
+                    <section>
+<pre><code>
+___main__.add_two$1.int32.int32:
+addl	%r8d, %ecx
+imull	$1000, %ecx, %eax
+movl	%eax, (%rdi)
+xorl	%eax, %eax
+retq
+</code></pre>
+                    </section>
+
+                    <section>
+<pre><code data-trim>
+add_two.inspect_asm().values()[0].decode('string_escape')
+</code></pre>
+                    </section>
+
+                    <section>
+<pre><code data-trim style="column-count:4">
+_wrapper.__main__.add_two$1.int32.int32:
+	movq	%rdi, %r14
+	movabsq	$_.const.add_two, %r10
+	movabsq	$_PyArg_UnpackTuple, %r11
+    ...
+	movabsq	$_PyNumber_Long, %r15
+	callq	*%r15
+	movq	%rax, %rbx
+	xorl	%r14d, %r14d
+	testq	%rbx, %rbx
+	je	LBB1_8
+	movabsq	$_PyLong_AsLongLong, %rax
+    ...
+</code></pre>
+                        <p>+ ~77 Python C API instructions</p>
+                    </section>
+
+                    <section>
+                        <p>
+                        Rich Wareham, "Creating a toy <strong>language</strong> with the <strong>Python</strong>, <strong>LLVM</strong> and the IPython web notebook"
+                        <a>https://www.youtube.com/watch?v=G78cTmgeUxI</a>
+                        </p>
+                    </section>
+                </section>
+
+                <section>
+                    <section>
+                        <h2>Minimal module with C</h2>
+<pre><code data-trim>
+// sample.c
+void initsample(void)
+{
+    Py_InitModule("sample", NULL);
+}
+</code></pre>
+                    </section>
+<section>
+<h2>PyMethodDef</h2>
+<pre><code data-trim>
+static PyObject * add_two(PyObject * self, PyObject * args);
+
+static PyMethodDef SampleMethods[] = {
+    {"add_two", add_two, METH_VARARGS, ""},
+    {NULL, NULL, 0, NULL}
+};
+
+void initsample(void) {
+    Py_InitModule("sample", SampleMethods);
+}
+</code></pre>
+</section>
+
+<section>
+<h2>func</h2>
+<pre><code data-trim>
+PyObject * add_two(PyObject * self, PyObject * args) {
+    int a, b, acc = 0;
+    if (!PyArg_ParseTuple(args, "ii", &a, &b)) {
+        PyErr_SetNone(PyExc_ValueError);
+        return NULL;
+    }
+    for (int i = 0; i < 1000; i++)
+        acc += a + b;
+    return Py_BuildValue("i", acc);
+}
+</code></pre>
+</section>
+                </section>
+
+<!-- Dyn module import -->
+                <section>
+                    <h4>Module import (dyn)</h4>
+<section>
+<pre><code data-trim>
+import sample
+</code></pre>
+</section>
+
+<section>
+<pre><code data-trim>
+IMPORT_NAME  0 (sample)
+STORE_FAST   0 (sample)
+</code></pre>
+</section>
+
+<section>
+<pre><code data-trim data-noescape>
+// ceval.c
+...
+w = GETITEM(names, oparg);
+v = PyDict_GetItemString(f->f_builtins, "__import__");
+...
+w = PyTuple_Pack(4, w,
+        f->f_globals,
+        f->f_locals == NULL ? Py_None : f->f_locals,
+        v);
+...
+x = PyEval_CallObject(v, w);
+...
+SET_TOP(x); if (x != NULL) DISPATCH();
+...
+</code></pre>
+</section>
+
+<section>
+    <ol>
+        <li>builtin___import__</li>
+        <li>PyImport_ImportModuleLevel</li>
+        <li>import_module_level</li>
+        <li>load_next</li>
+        <li>import_submodule</li>
+        <li>find_module</li>
+        <li>load_module</li>
+    </ol>
+</section>
+
+<section>
+<pre><code data-trim>
+dl_funcptr _PyImport_GetDynLoadFunc(const char *fqname,
+    const char *shortname,
+    const char *pathname, FILE *fp)
+{
+    char funcname[258];
+    PyOS_snprintf(funcname, sizeof(funcname),
+        "init%.200s", shortname);
+    return dl_loadmod(Py_GetProgramName(),
+        pathname, funcname);
+}
+</code></pre>
+</section>
+                </section>
+
+                <section>
+                    <h4>cython</h4>
+<section>
+<pre><code data-trim>
+def add_two(a, b):
+    i = acc = 0
+    while i < 1000:
+        acc += a + b
+    return acc
+</code></pre>
+<p><i>$ cat sample.c | wc -l</i> 1906</p>
+</section>
+<section>
+<pre><code data-trim>
+__pyx_t_2 = PyNumber_Add(__pyx_v_a, __pyx_v_b);
+if (unlikely(!__pyx_t_2)) {
+    __pyx_filename = __pyx_f[0];
+    __pyx_lineno = 14; __pyx_clineno = __LINE__;
+    goto __pyx_L1_error;
+}
+__Pyx_GOTREF(__pyx_t_2);
+__pyx_t_3 = PyNumber_InPlaceAdd(__pyx_v_acc, __pyx_t_2);
+if (unlikely(!__pyx_t_3)) {
+    __pyx_filename = __pyx_f[0]; __pyx_lineno = 14;
+    __pyx_clineno = __LINE__; goto __pyx_L1_error;
+}
+</code></pre>
+</section>
+<section>
+    <ul>
+        <li>extract C code</li>
+    </ul>
+<pre><code>int cadd_two(int a, int b) {
+    int32_t acc = 0;
+    for (int i = 0; i < 1000; i++)
+        acc += a + b;
+    return acc;
+}</code></pre>
+    <ul>
+        <li>wrap</li>
+    </ul>
+<pre><code>cdef extern from "sample_func.h":
+    int cadd_two(int, int)
+def add_two(a, b):
+    return cadd_two(a, b)
+</code></pre>
+<pre><code>cythonize("sample.pyx", sources=[ 'sample_func.c' ])
+</code></pre>
+</section>
+<section>
+<ul><li>2081 lines</li></ul>
+<pre><code>  __pyx_t_1 = __Pyx_PyInt_As_int32_t(__pyx_v_a); if (unlikely((__pyx_t_1 == (int32_t)-1) && PyErr_Occurred())) {__pyx_filename = __pyx_f[0]; __pyx_
+__pyx_t_2 = __Pyx_PyInt_As_int32_t(__pyx_v_b); if (unlikely((__pyx_t_2 == (int32_t)-1) && PyErr_Occurred())) {__pyx_filename = __pyx_f[0]; __pyx_
+__pyx_t_3 = __Pyx_PyInt_From_int32_t(cadd_two(__pyx_t_1, __pyx_t_2)); if (unlikely(!__pyx_t_3)) {__pyx_filename = __pyx_f[0]; __pyx_lineno = 8; _
+</code></pre>
+</section>
+                </section>
+
+                <section>
+                    <h2>Rust</h2>
+<section>
+<pre><code>#[no_mangle]
+pub extern fn initsample() {
+    unsafe {
+        Py_InitModule4_64(&SAMPLE[0] as *const _,
+            &METHODS[0] as *const _,
+            0 as *const _,
+            0,
+            PYTHON_API_VERSION);
+    };
+}
+</code></pre>
+</section>
+
+<section>
+<pre><code data-trim data-noescape>type PyCFunction = unsafe extern "C"
+    fn (slf: *mut isize, args: *mut isize) -> *mut isize;</code></pre>
+<pre><code data-trim data-noescape>
+#[repr(C)]
+struct PyMethodDef {
+    pub ml_name: *const i8,
+    pub ml_meth: Option&lt;PyCFunction&gt;,
+    pub ml_flags: i32,
+    pub ml_doc: *const i8,
+}
+unsafe impl Sync for PyMethodDef { }
+</code></pre>
+</section>
+
+<section>
+<pre><code data-trim data-noescape>lazy_static! {
+    static ref METHODS: Vec<PyMethodDef> = { vec![
+        PyMethodDef {
+            ml_name: &ADD_TWO[0] as *const _,
+            ml_meth: Some(add_two),
+        },
+        ...
+    ] };
+}
+</code></pre>
+</section>
+
+<section>
+<pre><code data-trim data-noescape>#[link(name="python2.7")]
+extern {
+    fn Py_InitModule4_64(name: *const i8,
+        methods: *const PyMethodDef,
+        doc: *const i8, s: isize, apiver: usize) -> *mut isize;
+    fn PyArg_ParseTuple(arg1: *mut isize,
+        arg2: *const i8, ...) -> isize;
+    fn Py_BuildValue(arg1: *const i8, ...) -> *mut isize;
+}</code></pre>
+</section>
+
+<section>
+<pre><code data-trim data-noescape>#[allow(unused_variables)]
+unsafe extern "C" fn add_two(slf: *mut isize,
+        args: *mut isize) -> *mut isize {
+    let mut a: i32 = 0;
+    let mut b: i32 = 0;
+    if PyArg_ParseTuple(args,
+            &II_ARGS[0] as *const _,
+            &a as *const i32, &b as *const i32) == 0 {
+        return 0 as *mut _;
+    }
+    let mut acc: i32 = 0;
+    for i in 0..1000 { acc += a + b; }
+    Py_BuildValue(&I_ARGS[0] as *const _, acc)
+}
+</code></pre>
+
+<pre><code data-trim>
+    let acc: i32 = (0..).take(1000)
+                .map(|_| a + b)
+                .fold(0, |acc, x| acc + x);
+</code></pre>
+</section>
+
+<section>
+    <h4>otool -tV ./sample.so</h4>
+<pre><code>__ZN7add_two20h391818698d43ab0ffcaE:
+...
+callq   0x7a002      ## symbol stub for: _PyArg_ParseTuple
+testq   %rax, %rax
+je      0x14e3
+movl    -0x8(%rbp), %eax
+addl    -0x4(%rbp), %eax
+imull   $0x3e8, %eax, %esi      ## imm = 0x3E8
+leaq    _ref5540(%rip), %rdi    ## literal pool for: "h"
+...
+</code></pre>
+</section>
+
+<section>
+    <h4>cons</h4>
+    <ul>
+        <li>CPython API 2.7</li>
+        <li>no_std</li>
+        <li>std::ffi::CString</li>
+        <li>jemalloc (rust) + malloc (malloc)</li>
+    </ul>
+</section>
+                </section>
+
+                <section>
+                    <h2>rust-cpython</h2>
+                    <p>
+                        <a>https://github.com/dgrunwald/rust-cpython</a>
+                    </p>
+<pre><code data-trim data-noescape>#![feature(slice_patterns)] #[macro_use] extern crate cpython;
+use cpython::{PyObject, PyResult, Python, PyTuple, PyDict};
+py_module_initializer!(sample, |py, m| {
+    try!(m.add(py, "add_two", py_fn!(add_two))); Ok(())
+});
+
+fn add_two(p: Python, args: &amp;PyTuple, kw: Option&lt;&amp;PyDict&gt;) -&gt; PyResult&lt;PyObject&gt; {
+    match args.as_slice() {
+        [a, b] =&gt; {
+            let acc: i32 = 0;
+            for i in 0..1000 { acc += a.value(p) + b.value(p) }
+            Ok(acc.to_py_object())
+        },
+        _ =&gt; Ok(py.None())
+    }
+}
+</code></pre>
+                </section>
+
+			</div>
+		</div>
+		<script src="lib/js/head.min.js"></script>
+		<script src="js/reveal.js"></script>
+		<script>
+			// Full list of configuration options available at:
+			// https://github.com/hakimel/reveal.js#configuration
+			Reveal.initialize({
+				controls: true,
+				progress: true,
+				history: true,
+				center: true,
+
+				transition: 'slide', // none/fade/slide/convex/concave/zoom
+
+				// Optional reveal.js plugins
+				dependencies: [
+					{ src: 'lib/js/classList.js', condition: function() { return !document.body.classList; } },
+					{ src: 'plugin/markdown/marked.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+					{ src: 'plugin/markdown/markdown.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+					{ src: 'plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } },
+					{ src: 'plugin/zoom-js/zoom.js', async: true },
+					{ src: 'plugin/notes/notes.js', async: true }
+				]
+			});
+
+		</script>
+
+	</body>
+</html>

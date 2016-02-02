@@ -1,0 +1,12 @@
+[package]
+name = "sample"
+version = "0.1.0"
+authors = ["zolkko <zolkko@gmail.com>"]
+
+[lib]
+name = "sample"
+crate-type = ["dylib"]
+
+[dependencies]
+lazy_static = "0.1.15"
+
