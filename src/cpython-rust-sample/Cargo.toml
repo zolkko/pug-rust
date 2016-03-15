@@ -1,0 +1,17 @@
+[package]
+name = "example"
+version = "0.1.0"
+authors = ["zolkko <zolkko@gmail.com>"]
+
+[lib]
+name = "example"
+crate-type = ["dylib"]
+
+[dependencies]
+interpolate_idents = "0.0.9"
+
+[dependencies.cpython]
+version = "0.0.5"
+default-features = false
+features = ["python27-sys"]
+
