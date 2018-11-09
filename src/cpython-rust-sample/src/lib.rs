@@ -1,6 +1,4 @@
-#![feature(slice_patterns)]
-#![feature(plugin)]
-#![plugin(interpolate_idents)]
+// #![feature(plugin)]
 
 #[macro_use]
 extern crate cpython;
@@ -9,25 +7,20 @@ extern crate cpython;
 use cpython::{PyObject, PyResult, Python, PyTuple, PyDict, ToPyObject, PythonObject};
 
 
-fn add_two(py: Python, args: &PyTuple, _: Option<&PyDict>) -> PyResult<PyObject> {
-    match args.as_slice() {
-        [ref a_obj, ref b_obj] => {
-            let a = a_obj.extract::<i32>(py).unwrap();
-            let b = b_obj.extract::<i32>(py).unwrap();
-            let mut acc:i32 = 0;
+fn add_two(py: Python, a: u32, b: u32) -> PyResult<u32> {
 
-            for _ in 0..1000 { 
-                acc += a + b;
-            }
+    let mut acc:u32 = 0;
 
-            Ok(acc.to_py_object(py).into_object())
-        },
-        _ => Ok(py.None())
+    for _ in 0..1000 { 
+        acc += a + b;
     }
+
+    Ok(acc)
 }
 
-py_module_initializer!(example, |py, module| {
-    try!(module.add(py, "add_two", py_fn!(add_two)));
+py_module_initializer!(example, initexample, PyInit_example, |py, module| {
+    module.add(py, "__doc__", "This module is implemented in Rust.")?;
+    module.add(py, "add_two", py_fn!(py, add_two(a: u32, b: u32)))?;
     Ok(())
 });
 

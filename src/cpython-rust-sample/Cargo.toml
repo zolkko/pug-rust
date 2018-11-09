@@ -2,16 +2,16 @@
 name = "example"
 version = "0.1.0"
 authors = ["zolkko <zolkko@gmail.com>"]
+edition = "2015"
 
 [lib]
 name = "example"
 crate-type = ["dylib"]
 
 [dependencies]
-interpolate_idents = "0.0.9"
 
 [dependencies.cpython]
-version = "0.0.5"
+version = "0.2.1"
 default-features = false
-features = ["python27-sys"]
+features = ["python27-sys", "extension-module-2-7"]
 
